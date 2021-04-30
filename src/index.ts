@@ -1,11 +1,52 @@
 import fastify from "fastify";
+import { Knex, knex } from "knex";
+import { v4 as uuid } from "uuid";
+
+const UserDB = knex({
+  client: "pg",
+  connection: {
+    host: "127.0.0.1",
+    user: "postgres",
+    password: "postgres",
+    database: "postgres",
+  },
+});
+
+interface User {
+  iid: string;
+  email: string;
+  authcode: string;
+}
 
 const server = fastify({ logger: true });
 // Declare a route
 server.post("/user/login", async (request: any, reply) => {
   const email = request.body?.email;
-  // store email and authcode
-  return { iid: "someIid" };
+
+  const [exists] = await UserDB<User>("users").select("*").where({ email });
+
+  if (exists) {
+    const [code, timestamp] = exists.authcode.split("#");
+    if (Date.now() - parseInt(timestamp) > 1000 * 60 * 20) {
+      const authcode = `${Math.floor(Math.random() * 999999)}#${Date.now()}`;
+      await UserDB<User>("users").where({ email: exists.email }).update({
+        authcode,
+      });
+      /* SEND EMAIL */
+      return { iid: exists.iid, email: exists.email };
+    }
+    return { iid: exists.iid, email };
+  } else {
+    const iid = uuid();
+    const authcode = `${Math.floor(Math.random() * 999999)}#${Date.now()}`;
+    /* SEND EMAIL */
+    await UserDB<User>("users").insert({
+      iid,
+      email,
+      authcode,
+    });
+    return { iid, email };
+  }
 });
 
 server.post("/user/authorize", async (request: any, reply) => {

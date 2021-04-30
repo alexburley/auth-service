@@ -33,9 +33,13 @@ server.post("/user/login", async (request: any, reply) => {
         authcode,
       });
       /* SEND EMAIL */
-      return { iid: exists.iid, email: exists.email, authcode: code };
+      return { iid: exists.iid, email: exists.email, authcode: parseInt(code) };
     }
-    return { iid: exists.iid, email, authcode: exists.authcode.split("#")[0] };
+    return {
+      iid: exists.iid,
+      email,
+      authcode: parseInt(exists.authcode.split("#")[0]),
+    };
   } else {
     const iid = uuid();
     const authcode = `${Math.floor(Math.random() * 999999)}#${Date.now()}`;
@@ -45,14 +49,19 @@ server.post("/user/login", async (request: any, reply) => {
       email,
       authcode,
     });
-    return { iid, email, authcode: authcode.split("#")[0] };
+    return { iid, email, authcode: parseInt(authcode.split("#")[0]) };
   }
 });
 
 server.post("/user/authorize", async (request: any, reply) => {
-  const code = request.body?.code;
-  // check code
-  // create key
+  const authcode = request.body?.authcode;
+  const email = request.body?.email;
+
+  const [exists] = await UserDB<User>("users").select("*").where({ email });
+  if (!exists) throw new Error("User does not exist");
+  const storedCode = parseInt(exists.authcode.split("#")[0]);
+  if (authcode !== storedCode) throw new Error("Code invalid");
+
   return { key: "world" };
 });
 

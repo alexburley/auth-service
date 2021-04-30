@@ -33,9 +33,9 @@ server.post("/user/login", async (request: any, reply) => {
         authcode,
       });
       /* SEND EMAIL */
-      return { iid: exists.iid, email: exists.email };
+      return { iid: exists.iid, email: exists.email, authcode: code };
     }
-    return { iid: exists.iid, email };
+    return { iid: exists.iid, email, authcode: exists.authcode.split("#")[0] };
   } else {
     const iid = uuid();
     const authcode = `${Math.floor(Math.random() * 999999)}#${Date.now()}`;
@@ -45,7 +45,7 @@ server.post("/user/login", async (request: any, reply) => {
       email,
       authcode,
     });
-    return { iid, email };
+    return { iid, email, authcode: authcode.split("#")[0] };
   }
 });
 

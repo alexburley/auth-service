@@ -23,18 +23,18 @@ const UserDB = knex({
   },
 });
 
-const KeysTable = new Table({
-  // Specify table name (used by DynamoDB)
-  name: "user-keys",
+const DocumentClient = new DynamoDB.DocumentClient({
+  region: "eu-west-2",
+});
 
-  // Define partition and sort keys
+const KeysTable = new Table({
+  name: "user-keys",
   partitionKey: "PK",
   sortKey: "SK",
-
-  // Add the DocumentClient
-  DocumentClient: new DynamoDB.DocumentClient({
-    region: "eu-west-2",
-  }),
+  indexes: {
+    GSI1: { partitionKey: "val", sortKey: "expires" },
+  },
+  DocumentClient,
 });
 
 const KeyEntity = new Entity({
@@ -42,14 +42,14 @@ const KeyEntity = new Entity({
   name: "key",
   attributes: {
     keyIid: { partitionKey: true },
-    expires: { hidden: true, sortKey: true },
-    data: { alias: "ownerIid" },
+    expires: { sortKey: true },
+    val: { alias: "ownerIid" },
   },
 });
 const server = fastify({ logger: true });
 const publickey = readFileSync(join(__dirname, "..", "jwtRS256.key.pub"));
 const privatekey = readFileSync(join(__dirname, "..", "jwtRS256.key"));
-// Declare a route
+
 server.post("/user/login", async (request: any, reply) => {
   const email = request.body?.email;
 
@@ -58,12 +58,16 @@ server.post("/user/login", async (request: any, reply) => {
   if (exists) {
     const [code, timestamp] = exists.authcode.split("#");
     if (!exists.authcode || Date.now() - parseInt(timestamp) > 1000 * 60 * 20) {
-      const authcode = `${Math.floor(Math.random() * 999999)}#${Date.now()}`;
+      const newCode = Math.floor(Math.random() * 999999);
+      const authcode = `${newCode}#${Date.now()}`;
       await UserDB<User>("users").where({ email: exists.email }).update({
         authcode,
       });
-      /* SEND EMAIL */
-      return { iid: exists.iid, email: exists.email, authcode: parseInt(code) };
+      return {
+        iid: exists.iid,
+        email: exists.email,
+        authcode: newCode,
+      };
     }
     return {
       iid: exists.iid,
@@ -73,7 +77,6 @@ server.post("/user/login", async (request: any, reply) => {
   } else {
     const iid = uuid();
     const authcode = `${Math.floor(Math.random() * 999999)}#${Date.now()}`;
-    /* SEND EMAIL */
     await UserDB<User>("users").insert({
       iid,
       email,
@@ -111,8 +114,6 @@ server.post("/user/authorize", async (request: any, reply) => {
     { algorithm: "RS256" }
   );
 
-  // Would ideally encrypt this
-  // Need to store against userIid for key revocation / indexing also platforms/
   await KeyEntity.put({
     keyIid,
     expires: new Date(expiresInSeconds * 1000),
@@ -122,7 +123,18 @@ server.post("/user/authorize", async (request: any, reply) => {
   return { key };
 });
 
-// server.delete
+server.delete("/user/:iid", async (request: any) => {
+  //TODO: Create index
+  const res = await KeysTable.scan({
+    filters: { attr: "val", eq: request.params.iid },
+  });
+  await Promise.all(
+    res.Items.map((item: any) => {
+      return KeyEntity.delete({ keyIid: item.keyIid, expires: item.expires });
+    })
+  );
+  return { success: true };
+});
 
 server.post("/user/key/renew", async (request: any, reply) => {
   const key = request.headers.authorization; // Candidate for rate limiting
@@ -146,6 +158,3 @@ const start = async () => {
 };
 
 start();
-
-// Step 1
-// User l

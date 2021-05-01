@@ -219,8 +219,7 @@ server.post(`/service/:clientIid/key`, async (request: any) => {
 
   const keyIid = uuid();
   const issuedAtInSeconds = Date.now();
-  const expiresInSeconds =
-    Math.floor(issuedAtInSeconds / 1000) + 60 * 60 * 24 * 7;
+  const expiresInSeconds = Math.floor(issuedAtInSeconds / 1000) + 60 * 60;
   const key = jwt.sign(
     {
       ownerIid: exists.iid,
@@ -249,8 +248,7 @@ server.register(async (authorized) => {
       const { ownerIid, aud } = request.keyPayload;
       const keyIid = uuid();
       const issuedAtInSeconds = Date.now();
-      const expiresInSeconds =
-        Math.floor(issuedAtInSeconds / 1000) + 60 * 60 * 24 * 7;
+      const expiresInSeconds = Math.floor(issuedAtInSeconds / 1000) + 60 * 60;
       const key = jwt.sign(
         {
           ownerIid,

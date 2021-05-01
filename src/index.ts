@@ -6,12 +6,21 @@ import { readFileSync } from "fs";
 import { join } from "path";
 import { Table, Entity } from "dynamodb-toolbox";
 import { DynamoDB } from "aws-sdk";
+import { promisify } from "util";
+import { resolve } from "node:path";
 
 interface User {
   iid: string;
   email: string;
   authcode: string;
 }
+const redis = require("redis").createClient({
+  host: "127.0.0.1",
+  port: 6379,
+});
+
+const rGet = promisify(redis.get).bind(redis);
+const rSet = promisify(redis.set).bind(redis);
 
 const UserDB = knex({
   client: "pg",
@@ -119,8 +128,8 @@ server.post("/user/authorize", async (request: any, reply) => {
     expires: new Date(expiresInSeconds * 1000),
     ownerIid: exists.iid,
   });
-
-  return { key };
+  await rSet(keyIid, `${expiresInSeconds * 1000}`);
+  return { key, keyIid };
 });
 
 server.delete("/user/:iid", async (request: any) => {
@@ -142,10 +151,16 @@ server.post("/user/key/renew", async (request: any, reply) => {
   return { key: "world" };
 });
 
-server.head("/key/:key", (request: any, reply) => {
-  const key = request.params?.key;
-  // Check redis for key
-  reply.status(204);
+server.head("/key/:keyIid", (request: any, reply) => {
+  const key = request.params?.keyIid;
+  redis.get(key, function (err: any, res: any) {
+    if (err) {
+      console.log(err);
+      reply.status(500).send();
+    } else {
+      reply.status(res ? 204 : 404).send();
+    }
+  });
 });
 
 // Run the server!

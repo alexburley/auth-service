@@ -1,5 +1,4 @@
 version: "3.9"
-
 services:
   db:
     image: postgres
@@ -11,10 +10,13 @@ services:
       - POSTGRES_DB=postgres
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
-
-  dynamodb:
-    image: amazon/dynamodb-local
-    volumes:
-      - ./data/dynamodb:/data/
+  redis:
+    image: redis:alpine
+    command: redis-server
     ports:
-      - "8000:8000"
+      - "6379:6379"
+    volumes:
+      - ./data/redis:/var/lib/redis
+      - ./data/redis.conf:/usr/local/etc/redis/redis.conf
+    environment:
+      - REDIS_REPLICATION_MODE=master

@@ -2,8 +2,10 @@ import fastify from "fastify";
 import { Knex, knex } from "knex";
 import { v4 as uuid } from "uuid";
 import jwt = require("jsonwebtoken");
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync } from "fs";
+import { join } from "path";
+import { Table, Entity } from "dynamodb-toolbox";
+import { DynamoDB } from "aws-sdk";
 
 interface User {
   iid: string;
@@ -21,9 +23,32 @@ const UserDB = knex({
   },
 });
 
+const KeysTable = new Table({
+  // Specify table name (used by DynamoDB)
+  name: "user-keys",
+
+  // Define partition and sort keys
+  partitionKey: "PK",
+  sortKey: "SK",
+
+  // Add the DocumentClient
+  DocumentClient: new DynamoDB.DocumentClient({
+    region: "eu-west-2",
+  }),
+});
+
+const KeyEntity = new Entity({
+  table: KeysTable,
+  name: "key",
+  attributes: {
+    keyIid: { partitionKey: true },
+    expires: { hidden: true, sortKey: true },
+    data: { alias: "ownerIid" },
+  },
+});
 const server = fastify({ logger: true });
-const publickey = readFileSync(join(__dirname, "/jwtRS256.key.pub"));
-const privatekey = readFileSync(join(__dirname, "/jwtRS256.key"));
+const publickey = readFileSync(join(__dirname, "..", "jwtRS256.key.pub"));
+const privatekey = readFileSync(join(__dirname, "..", "jwtRS256.key"));
 // Declare a route
 server.post("/user/login", async (request: any, reply) => {
   const email = request.body?.email;
@@ -32,7 +57,7 @@ server.post("/user/login", async (request: any, reply) => {
 
   if (exists) {
     const [code, timestamp] = exists.authcode.split("#");
-    if (Date.now() - parseInt(timestamp) > 1000 * 60 * 20) {
+    if (!exists.authcode || Date.now() - parseInt(timestamp) > 1000 * 60 * 20) {
       const authcode = `${Math.floor(Math.random() * 999999)}#${Date.now()}`;
       await UserDB<User>("users").where({ email: exists.email }).update({
         authcode,
@@ -70,17 +95,34 @@ server.post("/user/authorize", async (request: any, reply) => {
     authcode: "",
   });
 
+  const keyIid = uuid();
+  const issuedAtInSeconds = Date.now();
+  const expiresInSeconds =
+    Math.floor(issuedAtInSeconds / 1000) + 60 * 60 * 24 * 7;
   const key = jwt.sign(
     {
-      iid: exists.iid,
-      iat: Math.floor(Date.now() / 1000),
-      exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7, // expire in 7 days
+      ownerIid: exists.iid,
+      keyIid,
+      jwk: publickey.toString("utf8"),
+      iat: Math.floor(issuedAtInSeconds / 1000),
+      exp: expiresInSeconds, // expire in 7 days
     },
     privatekey,
     { algorithm: "RS256" }
   );
+
+  // Would ideally encrypt this
+  // Need to store against userIid for key revocation / indexing also platforms/
+  await KeyEntity.put({
+    keyIid,
+    expires: new Date(expiresInSeconds * 1000),
+    ownerIid: exists.iid,
+  });
+
   return { key };
 });
+
+// server.delete
 
 server.post("/user/key/renew", async (request: any, reply) => {
   const key = request.headers.authorization; // Candidate for rate limiting

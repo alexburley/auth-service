@@ -12,6 +12,13 @@ server
   .register(authorizer, { aud: "authorized" })
   .get("/resource", (request, reply) => {
     reply.status(200).send({ some: "data" });
+  })
+  .get("/user/microservice1", async (request, reply) => {
+    return axios
+      .get("http://localhost:3002/resource", {
+        headers: request.headers,
+      })
+      .then(({ data }) => data);
   });
 
 // Run the server!

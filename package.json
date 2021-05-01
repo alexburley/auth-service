@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "start": "nodemon --watch \"auth-service/**\" --ext \"ts,json\" --ignore \"auth-service/**/*.test.ts\" --exec \"ts-node auth-service/index.ts\"| pino-pretty",
-    "start:orc": "nodemon --watch \"orchestration-service/**\" --ext \"ts,json\" --ignore \"orchestration-service/**/*.test.ts\" --exec \"ts-node orchestration-service/index.ts\"| pino-pretty"
+    "start:orc": "nodemon --watch \"orchestration-service/**\" --ext \"ts,json\" --ignore \"orchestration-service/**/*.test.ts\" --exec \"ts-node orchestration-service/index.ts\"| pino-pretty",
+    "start:m1": "nodemon --watch \"microservice1/**\" --ext \"ts,json\" --ignore \"microservice1/**/*.test.ts\" --exec \"ts-node microservice1/index.ts\"| pino-pretty"
   },
   "author": "",
   "license": "ISC",

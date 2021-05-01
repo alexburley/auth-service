@@ -2,8 +2,10 @@
   "extends": "@tsconfig/node12/tsconfig.json",
   "compilerOptions": {
     "preserveConstEnums": true,
-    "noImplicitAny": false
+    "noImplicitAny": false,
+    "typeRoots": ["./node_modules/@types", "./types.d.ts"]
   },
+
   "include": ["auth-service/**/*", "orchestration-service/**/*"],
   "exclude": ["node_modules", "**/*.spec.ts"]
 }

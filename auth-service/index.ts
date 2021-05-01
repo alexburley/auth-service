@@ -7,7 +7,7 @@ import { join } from "path";
 import { Table, Entity } from "dynamodb-toolbox";
 import { DynamoDB } from "aws-sdk";
 import { promisify } from "util";
-import { resolve } from "node:path";
+import authorizer from "../shared/authorizer";
 
 interface User {
   iid: string;
@@ -116,6 +116,7 @@ server.post("/user/authorize", async (request: any, reply) => {
     {
       ownerIid: exists.iid,
       keyIid,
+      groups: ["users"],
       aud: ["authorized"],
       iat: Math.floor(issuedAtInSeconds / 1000),
       exp: expiresInSeconds, // expire in 7 days
@@ -150,10 +151,41 @@ server.delete("/user/:iid", async (request: any) => {
   return { success: true };
 });
 
-server.post("/user/key/renew", async (request: any, reply) => {
-  const key = request.headers.authorization; // Candidate for rate limiting
-  // Validate, create new key, return new key
-  return { key: "world" };
+server.register((authorized) => {
+  return authorized
+    .register(authorizer, {})
+    .post("/user/key/renew", async (request: any, reply) => {
+      const { ownerIid: userIid } = request.keyPayload;
+      const [exists] = await UserDB<User>("users")
+        .select("*")
+        .where({ iid: userIid });
+      if (!exists) throw new Error("User has been deleted");
+
+      const keyIid = uuid();
+      const issuedAtInSeconds = Date.now();
+      const expiresInSeconds =
+        Math.floor(issuedAtInSeconds / 1000) + 60 * 60 * 24 * 7;
+      const key = jwt.sign(
+        {
+          ownerIid: exists.iid,
+          keyIid,
+          groups: ["users"],
+          aud: ["authorized"],
+          iat: Math.floor(issuedAtInSeconds / 1000),
+          exp: expiresInSeconds, // expire in 7 days
+        },
+        privatekey,
+        { algorithm: "RS256" }
+      );
+
+      await KeyEntity.put({
+        keyIid,
+        expires: new Date(expiresInSeconds * 1000),
+        ownerIid: exists.iid,
+      });
+      await rSet(keyIid, `${expiresInSeconds * 1000}`);
+      return { key, keyIid };
+    });
 });
 
 server.head("/key/:keyIid", (request: any, reply) => {

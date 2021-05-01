@@ -7,7 +7,7 @@ import axios from "axios";
 const publickey = readFileSync(join(__dirname, "..", "jwtRS256.key.pub"));
 
 export default fp(
-  async (server: FastifyInstance, options: { aud?: string }) => {
+  async (server: FastifyInstance, options: { aud?: string[] }) => {
     server.addHook("onRequest", (request: any, reply, done) => {
       const auth = request.headers?.authorization?.split(" ")[1] || "";
       try {
@@ -17,7 +17,7 @@ export default fp(
         }
         if (
           !payload.aud ||
-          (options.aud && !payload.aud.includes(options.aud))
+          (options.aud && !payload.aud.includes(options.aud[0]))
         ) {
           throw new Error("Not authed");
         }

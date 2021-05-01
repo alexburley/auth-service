@@ -161,7 +161,7 @@ server.delete("/user/:iid", async (request: any) => {
 
 server.register((authorized) => {
   return authorized
-    .register(authorizer, { aud: "authorized" })
+    .register(authorizer, { aud: ["authorized"] })
     .post("/user/key/renew", async (request: any, reply) => {
       const { ownerIid: userIid } = request.keyPayload;
       const [exists] = await UserDB<User>("users")
@@ -200,7 +200,6 @@ server.head("/key/:keyIid", (request: any, reply) => {
   const key = request.params?.keyIid;
   rGet(key)
     .then((res) => {
-      console.log(res);
       return res;
     })
     .then((res: any) => reply.status(res ? 204 : 404).send())
@@ -243,7 +242,7 @@ server.post(`/service/:clientIid/key`, async (request: any) => {
 
 server.register(async (authorized) => {
   return authorized
-    .register(authorizer, { aud: "services" })
+    .register(authorizer, { aud: ["services"] })
     .post("/service/key/renew", async (request: any, reply) => {
       const { ownerIid, aud } = request.keyPayload;
       const keyIid = uuid();

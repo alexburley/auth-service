@@ -6,17 +6,46 @@ import authorizer from "../shared/authorizer";
 import axios from "axios";
 
 const server = fastify({ logger: true });
-const publickey = readFileSync(join(__dirname, "..", "jwtRS256.key.pub"));
+
+const clientId = "cf55daaa-89d4-4889-a1a7-86657f979c1a";
+const secret = "orcServiceSecret";
+const password = "orcServicePassword";
+const name = "orchestration-service";
+
+let serviceToken;
+
+const getServiceToken = async () => {
+  console.log(serviceToken);
+  if (serviceToken) {
+    return serviceToken;
+  } else {
+    const { data } = await axios.post(
+      `http://localhost:3000/service/${clientId}/key`,
+      {},
+      {
+        headers: {
+          Authorization: secret,
+        },
+      }
+    );
+    serviceToken = data.key;
+    return data.key;
+  }
+};
 
 server
-  .register(authorizer, { aud: "authorized" })
+  .register(authorizer, { aud: ["authorized"] })
   .get("/resource", (request, reply) => {
     reply.status(200).send({ some: "data" });
   })
   .get("/user/microservice1", async (request, reply) => {
+    const key = await getServiceToken();
+    request.log.info(Date.now());
     return axios
       .get("http://localhost:3002/resource", {
-        headers: request.headers,
+        headers: {
+          Authorization: `Bearer ${key}`,
+        },
       })
       .then(({ data }) => data);
   });

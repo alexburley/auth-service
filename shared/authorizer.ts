@@ -9,7 +9,6 @@ const publickey = readFileSync(join(__dirname, "..", "jwtRS256.key.pub"));
 export default fp(
   async (server: FastifyInstance, options: { aud?: string }) => {
     server.addHook("onRequest", (request: any, reply, done) => {
-      console.log("here");
       const auth = request.headers?.authorization?.split(" ")[1] || "";
       try {
         const payload: any = jwt.verify(auth, publickey);

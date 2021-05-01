@@ -14,6 +14,14 @@ interface User {
   email: string;
   authcode: string;
 }
+
+interface Service {
+  iid: string;
+  clientSecret: string;
+  clientPassword: string;
+  name: string;
+}
+
 const redis = require("redis").createClient({
   host: "127.0.0.1",
   port: 6379,
@@ -153,13 +161,13 @@ server.delete("/user/:iid", async (request: any) => {
 
 server.register((authorized) => {
   return authorized
-    .register(authorizer, {})
+    .register(authorizer, { aud: "authorized" })
     .post("/user/key/renew", async (request: any, reply) => {
       const { ownerIid: userIid } = request.keyPayload;
       const [exists] = await UserDB<User>("users")
         .select("*")
         .where({ iid: userIid });
-      if (!exists) throw new Error("User has been deleted");
+      if (!exists) throw new Error("User does not exist");
 
       const keyIid = uuid();
       const issuedAtInSeconds = Date.now();
@@ -191,8 +199,78 @@ server.register((authorized) => {
 server.head("/key/:keyIid", (request: any, reply) => {
   const key = request.params?.keyIid;
   rGet(key)
+    .then((res) => {
+      console.log(res);
+      return res;
+    })
     .then((res: any) => reply.status(res ? 204 : 404).send())
     .catch((err: any) => reply.status(500).send(err));
+});
+
+server.post(`/service/:clientIid/key`, async (request: any) => {
+  //TODO: There is an opportunity here for the secret to be encrypted using an agreed upon password and timestamp
+  // In this way we can make sure that if the request is ever logged anywhere the signature generated will be invalid quickly.
+  const secret = request?.headers?.authorization;
+  const [exists] = await UserDB<Service>("services")
+    .select("*")
+    .where({ iid: request.params.clientIid });
+  if (!exists) throw new Error("Service does note exists");
+  if (secret !== exists.clientSecret) throw new Error("Invalid signature");
+
+  const keyIid = uuid();
+  const issuedAtInSeconds = Date.now();
+  const expiresInSeconds =
+    Math.floor(issuedAtInSeconds / 1000) + 60 * 60 * 24 * 7;
+  const key = jwt.sign(
+    {
+      ownerIid: exists.iid,
+      keyIid,
+      aud: [exists.name, "services"],
+      iat: Math.floor(issuedAtInSeconds / 1000),
+      exp: expiresInSeconds, // expire in 7 days
+    },
+    privatekey,
+    { algorithm: "RS256" }
+  );
+
+  await KeyEntity.put({
+    keyIid,
+    expires: new Date(expiresInSeconds * 1000),
+    ownerIid: exists.iid,
+  });
+  await rSet(keyIid, `${expiresInSeconds * 1000}`);
+  return { key, keyIid };
+});
+
+server.register(async (authorized) => {
+  return authorized
+    .register(authorizer, { aud: "services" })
+    .post("/service/key/renew", async (request: any, reply) => {
+      const { ownerIid, aud } = request.keyPayload;
+      const keyIid = uuid();
+      const issuedAtInSeconds = Date.now();
+      const expiresInSeconds =
+        Math.floor(issuedAtInSeconds / 1000) + 60 * 60 * 24 * 7;
+      const key = jwt.sign(
+        {
+          ownerIid,
+          keyIid,
+          aud,
+          iat: Math.floor(issuedAtInSeconds / 1000),
+          exp: expiresInSeconds, // expire in 7 days
+        },
+        privatekey,
+        { algorithm: "RS256" }
+      );
+
+      await KeyEntity.put({
+        keyIid,
+        expires: new Date(expiresInSeconds * 1000),
+        ownerIid,
+      });
+      await rSet(keyIid, `${expiresInSeconds * 1000}`);
+      return { key, keyIid };
+    });
 });
 
 // Run the server!

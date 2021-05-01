@@ -14,8 +14,8 @@ const name = "orchestration-service";
 
 let serviceToken;
 
+// Consumers can cache their tokens, and either add a retry mechanism on 401 or check the expiry in the jwt
 const getServiceToken = async () => {
-  console.log(serviceToken);
   if (serviceToken) {
     return serviceToken;
   } else {

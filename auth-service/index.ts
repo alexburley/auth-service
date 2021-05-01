@@ -21,6 +21,7 @@ const redis = require("redis").createClient({
 
 const rGet = promisify(redis.get).bind(redis);
 const rSet = promisify(redis.set).bind(redis);
+const rDelete = promisify(redis.del).bind(redis);
 
 const UserDB = knex({
   client: "pg",
@@ -115,7 +116,7 @@ server.post("/user/authorize", async (request: any, reply) => {
     {
       ownerIid: exists.iid,
       keyIid,
-      jwk: publickey.toString("utf8"),
+      aud: ["authorized"],
       iat: Math.floor(issuedAtInSeconds / 1000),
       exp: expiresInSeconds, // expire in 7 days
     },
@@ -134,12 +135,16 @@ server.post("/user/authorize", async (request: any, reply) => {
 
 server.delete("/user/:iid", async (request: any) => {
   //TODO: Create index
+  await UserDB<User>("users").where("iid", request.params.iid).del();
   const res = await KeysTable.scan({
     filters: { attr: "val", eq: request.params.iid },
   });
   await Promise.all(
     res.Items.map((item: any) => {
-      return KeyEntity.delete({ keyIid: item.keyIid, expires: item.expires });
+      return KeyEntity.delete({
+        keyIid: item.keyIid,
+        expires: item.expires,
+      }).then(() => rDelete(item.keyIid));
     })
   );
   return { success: true };
@@ -153,7 +158,7 @@ server.post("/user/key/renew", async (request: any, reply) => {
 
 server.head("/key/:keyIid", (request: any, reply) => {
   const key = request.params?.keyIid;
-  rSet(key)
+  rGet(key)
     .then((res: any) => reply.status(res ? 204 : 404).send())
     .catch((err: any) => reply.status(500).send(err));
 });

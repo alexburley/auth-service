@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "start": "nodemon --watch \"src/**\" --ext \"ts,json\" --ignore \"src/**/*.test.ts\" --exec \"ts-node src/index.ts\"| pino-pretty"
+    "start": "nodemon --watch \"auth-service/**\" --ext \"ts,json\" --ignore \"auth-service/**/*.test.ts\" --exec \"ts-node auth-service/index.ts\"| pino-pretty",
+    "start:orc": "nodemon --watch \"orchestration-service/**\" --ext \"ts,json\" --ignore \"orchestration-service/**/*.test.ts\" --exec \"ts-node orchestration-service/index.ts\"| pino-pretty"
   },
   "author": "",
   "license": "ISC",
@@ -20,6 +21,7 @@
   },
   "dependencies": {
     "aws-sdk": "^2.897.0",
+    "axios": "^0.21.1",
     "dynamodb-toolbox": "^0.3.3",
     "fastify": "^3.15.0",
     "jsonwebtoken": "^8.5.1",

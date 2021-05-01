@@ -153,14 +153,9 @@ server.post("/user/key/renew", async (request: any, reply) => {
 
 server.head("/key/:keyIid", (request: any, reply) => {
   const key = request.params?.keyIid;
-  redis.get(key, function (err: any, res: any) {
-    if (err) {
-      console.log(err);
-      reply.status(500).send();
-    } else {
-      reply.status(res ? 204 : 404).send();
-    }
-  });
+  rSet(key)
+    .then((res: any) => reply.status(res ? 204 : 404).send())
+    .catch((err: any) => reply.status(500).send(err));
 });
 
 // Run the server!

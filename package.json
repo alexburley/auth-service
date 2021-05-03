@@ -6,7 +6,8 @@
   "scripts": {
     "start": "nodemon --watch \"auth-service/**\" --ext \"ts,json\" --ignore \"auth-service/**/*.test.ts\" --exec \"ts-node auth-service/index.ts\"| pino-pretty",
     "start:orc": "nodemon --watch \"orchestration-service/**\" --ext \"ts,json\" --ignore \"orchestration-service/**/*.test.ts\" --exec \"ts-node orchestration-service/index.ts\"| pino-pretty",
-    "start:m1": "nodemon --watch \"microservice1/**\" --ext \"ts,json\" --ignore \"microservice1/**/*.test.ts\" --exec \"ts-node microservice1/index.ts\"| pino-pretty"
+    "start:m1": "nodemon --watch \"microservice1/**\" --ext \"ts,json\" --ignore \"microservice1/**/*.test.ts\" --exec \"ts-node microservice1/index.ts\"| pino-pretty",
+    "rotate": "ts-node secret-rotator"
   },
   "author": "",
   "license": "ISC",
@@ -16,6 +17,7 @@
     "@types/node": "^15.0.1",
     "@types/redis": "^2.8.28",
     "@types/uuid": "^8.3.0",
+    "aws-lambda": "^1.0.6",
     "nodemon": "^2.0.7",
     "ts-node": "^9.1.1",
     "typescript": "^4.2.4"

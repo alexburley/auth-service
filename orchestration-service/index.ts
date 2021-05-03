@@ -1,7 +1,6 @@
 import fastify from "fastify";
 import jwt = require("jsonwebtoken");
-import { readFileSync } from "fs";
-import { join } from "path";
+import * as crypto from "crypto";
 import authorizer from "../shared/authorizer";
 import axios from "axios";
 
@@ -19,12 +18,16 @@ const getServiceToken = async () => {
   if (serviceToken) {
     return serviceToken;
   } else {
+    const hash = crypto
+      .createHmac("SHA1", password)
+      .update(secret)
+      .digest("hex");
     const { data } = await axios.post(
       `http://localhost:3000/service/${clientId}/key`,
       {},
       {
         headers: {
-          Authorization: secret,
+          Authorization: hash,
         },
       }
     );

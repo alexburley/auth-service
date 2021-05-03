@@ -5,7 +5,7 @@ import jwt = require("jsonwebtoken");
 import { readFileSync } from "fs";
 import { join } from "path";
 import { Table, Entity } from "dynamodb-toolbox";
-import { DynamoDB } from "aws-sdk";
+import { DynamoDB, SecretsManager } from "aws-sdk";
 import { promisify } from "util";
 import * as crypto from "crypto";
 import authorizer from "../shared/authorizer";
@@ -65,9 +65,27 @@ const KeyEntity = new Entity({
     val: { alias: "ownerIid" },
   },
 });
+
 const server = fastify({ logger: true });
-const publickey = readFileSync(join(__dirname, "..", "jwtRS256.key.pub"));
-const privatekey = readFileSync(join(__dirname, "..", "jwtRS256.key"));
+
+let publicKey;
+let privateKey;
+
+const getKeys = async () => {
+  var client = new SecretsManager({
+    region: "eu-west-2",
+  });
+  const { SecretString } = await client
+    .getSecretValue({ SecretId: "auth-service/keys" })
+    .promise();
+  const keys = JSON.parse(SecretString || "");
+  publicKey = keys["auth-service/public-key"];
+  privateKey = keys["auth-service/private-key"];
+  return {
+    publicKey,
+    privateKey,
+  };
+};
 
 const generateKey = async (ownerIid, payload = {}) => {
   const keyIid = uuid();
@@ -81,10 +99,10 @@ const generateKey = async (ownerIid, payload = {}) => {
       keyIid,
       iat: Math.floor(issuedAtInSeconds / 1000),
       exp: expiresInSeconds, // expire in 7 days
-      jwk: publickey.toString("utf8"),
+      jwk: publicKey.toString("utf8"),
       ...payload,
     },
-    privatekey,
+    privateKey,
     { algorithm: "RS256" }
   );
 
@@ -197,9 +215,6 @@ server.register((authorized) => {
 server.head("/key/:keyIid", (request: any, reply) => {
   const key = request.params?.keyIid;
   rGet(key)
-    .then((res) => {
-      return res;
-    })
     .then((res: any) => reply.status(res ? 204 : 404).send())
     .catch((err: any) => reply.status(500).send(err));
 });
@@ -258,6 +273,7 @@ server.ready(() => {
 
 const start = async () => {
   try {
+    await getKeys();
     await server.listen(3000);
   } catch (err) {
     server.log.error(err);

@@ -71,6 +71,7 @@ const privatekey = readFileSync(join(__dirname, "..", "jwtRS256.key"));
 const generateKey = async (ownerIid, payload = {}) => {
   const keyIid = uuid();
   const issuedAtInSeconds = Date.now();
+  const refreshToken = uuid();
 
   // NOTE
   /*
@@ -97,9 +98,16 @@ const generateKey = async (ownerIid, payload = {}) => {
     expires: new Date(expiresInSeconds * 1000),
     ownerIid,
   });
+
   await rSet(keyIid, `${expiresInSeconds * 1000}`);
 
-  return { key, keyIid, expiresInSeconds, issuedAtInSeconds };
+  await KeyEntity.put({
+    keyIid: refreshToken,
+    expires: new Date(Date.now() + 1000 * 60 * 60 * 24 * 7),
+    ownerIid,
+  });
+
+  return { key, keyIid, refreshToken };
 };
 
 server.post("/user/login", async (request: any, reply) => {
@@ -150,12 +158,10 @@ server.post("/user/authorize", async (request: any, reply) => {
     authcode: "",
   });
 
-  const { key, keyIid } = await generateKey(exists.iid, {
+  return generateKey(exists.iid, {
     groups: ["users"],
     aud: ["authorized"],
   });
-
-  return { key, keyIid };
 });
 
 server.delete("/user/:iid", async (request: any) => {
@@ -178,17 +184,16 @@ server.delete("/user/:iid", async (request: any) => {
 server.register((authorized) => {
   return authorized
     .register(authorizer, { aud: ["authorized"] })
-    .post("/user/key/renew", async (request: any, reply) => {
+    .post("/user/key", async (request: any, reply) => {
       const { ownerIid: userIid } = request.keyPayload;
       const [exists] = await UserDB<User>("users")
         .select("*")
         .where({ iid: userIid });
       if (!exists) throw new Error("User does not exist");
-      const { key, keyIid } = await generateKey(exists.iid, {
+      return generateKey(exists.iid, {
         groups: ["users"],
         aud: ["authorized"],
       });
-      return { key, keyIid };
     });
 });
 
@@ -215,19 +220,38 @@ server.post(`/service/:clientIid/key`, async (request: any) => {
   if (!exists) throw new Error("Service does note exists");
   if (secret !== exists.clientSecret) throw new Error("Invalid signature");
 
-  const { key, keyIid } = await generateKey(exists.iid, {
+  return generateKey(exists.iid, {
     aud: [exists.name, "services"],
   });
-  return { key, keyIid };
 });
 
 server.register(async (authorized) => {
   return authorized
     .register(authorizer, { aud: ["services"] })
-    .post("/service/key/renew", async (request: any, reply) => {
+    .post("/service/key", async (request: any, reply) => {
       const { ownerIid, aud } = request.keyPayload;
-      const { key, keyIid } = await generateKey(ownerIid, { aud });
-      return { key, keyIid };
+      return generateKey(ownerIid, {
+        aud,
+      });
+    });
+});
+
+server.register(async (authorized) => {
+  return authorized
+    .register(authorizer, { ignoreExpiry: true })
+    .post("/key/:keyIid/refresh", async (request: any, reply) => {
+      const key = request.params?.keyIid;
+      const ownerIid = request.keyPayload.ownerIid;
+      const res = await KeyEntity.query(key, {
+        limit: 1,
+        gt: new Date(Date.now()).toDateString(),
+        filters: { attr: "ownerIid", eq: ownerIid },
+      });
+
+      console.log(res);
+
+      if (!res.Items.length) throw new Error("Unauthorized");
+      return generateKey(ownerIid, { aud: request.keyPayload.aud });
     });
 });
 

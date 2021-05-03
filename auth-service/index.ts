@@ -231,6 +231,10 @@ server.register(async (authorized) => {
     });
 });
 
+server.ready(() => {
+  console.log(server.printRoutes());
+});
+
 // Run the server!
 const start = async () => {
   try {

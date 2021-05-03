@@ -87,6 +87,7 @@ const generateKey = async (ownerIid, payload = {}) => {
       keyIid,
       iat: Math.floor(issuedAtInSeconds / 1000),
       exp: expiresInSeconds, // expire in 7 days
+      jwk: publickey.toString("utf8"),
       ...payload,
     },
     privatekey,

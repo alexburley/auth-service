@@ -14,7 +14,9 @@ export default fp(
     server.addHook("onRequest", (request: any, reply, done) => {
       const auth = request.headers?.authorization?.split(" ")[1] || "";
       try {
-        const payload: any = jwt.verify(auth, publickey, {
+        const decoded = jwt.decode(auth) as any;
+        if (!decoded.jwk) throw new Error("Bad Token");
+        const payload: any = jwt.verify(auth, decoded.jwk, {
           ignoreExpiration: true,
         });
         if (

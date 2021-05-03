@@ -68,6 +68,40 @@ const server = fastify({ logger: true });
 const publickey = readFileSync(join(__dirname, "..", "jwtRS256.key.pub"));
 const privatekey = readFileSync(join(__dirname, "..", "jwtRS256.key"));
 
+const generateKey = async (ownerIid, payload = {}) => {
+  const keyIid = uuid();
+  const issuedAtInSeconds = Date.now();
+
+  // NOTE
+  /*
+    This is set to a week long, but ideally this would less. But making it less introduces difficulty on the frontend
+    so that we can maintain a solid user experience would need to think about issuing a refresh token for the user that
+    itself has an expiry.
+  */
+  const expiresInSeconds = Math.floor(issuedAtInSeconds / 1000) + 60 * 60;
+
+  const key = jwt.sign(
+    {
+      ownerIid,
+      keyIid,
+      iat: Math.floor(issuedAtInSeconds / 1000),
+      exp: expiresInSeconds, // expire in 7 days
+      ...payload,
+    },
+    privatekey,
+    { algorithm: "RS256" }
+  );
+
+  await KeyEntity.put({
+    keyIid,
+    expires: new Date(expiresInSeconds * 1000),
+    ownerIid,
+  });
+  await rSet(keyIid, `${expiresInSeconds * 1000}`);
+
+  return { key, keyIid, expiresInSeconds, issuedAtInSeconds };
+};
+
 server.post("/user/login", async (request: any, reply) => {
   const email = request.body?.email;
 
@@ -116,29 +150,11 @@ server.post("/user/authorize", async (request: any, reply) => {
     authcode: "",
   });
 
-  const keyIid = uuid();
-  const issuedAtInSeconds = Date.now();
-  const expiresInSeconds =
-    Math.floor(issuedAtInSeconds / 1000) + 60 * 60 * 24 * 7;
-  const key = jwt.sign(
-    {
-      ownerIid: exists.iid,
-      keyIid,
-      groups: ["users"],
-      aud: ["authorized"],
-      iat: Math.floor(issuedAtInSeconds / 1000),
-      exp: expiresInSeconds, // expire in 7 days
-    },
-    privatekey,
-    { algorithm: "RS256" }
-  );
-
-  await KeyEntity.put({
-    keyIid,
-    expires: new Date(expiresInSeconds * 1000),
-    ownerIid: exists.iid,
+  const { key, keyIid } = await generateKey(exists.iid, {
+    groups: ["users"],
+    aud: ["authorized"],
   });
-  await rSet(keyIid, `${expiresInSeconds * 1000}`);
+
   return { key, keyIid };
 });
 
@@ -168,36 +184,19 @@ server.register((authorized) => {
         .select("*")
         .where({ iid: userIid });
       if (!exists) throw new Error("User does not exist");
-
-      const keyIid = uuid();
-      const issuedAtInSeconds = Date.now();
-      const expiresInSeconds =
-        Math.floor(issuedAtInSeconds / 1000) + 60 * 60 * 24 * 7;
-      const key = jwt.sign(
-        {
-          ownerIid: exists.iid,
-          keyIid,
-          groups: ["users"],
-          aud: ["authorized"],
-          iat: Math.floor(issuedAtInSeconds / 1000),
-          exp: expiresInSeconds, // expire in 7 days
-        },
-        privatekey,
-        { algorithm: "RS256" }
-      );
-
-      await KeyEntity.put({
-        keyIid,
-        expires: new Date(expiresInSeconds * 1000),
-        ownerIid: exists.iid,
+      const { key, keyIid } = await generateKey(exists.iid, {
+        groups: ["users"],
+        aud: ["authorized"],
       });
-      await rSet(keyIid, `${expiresInSeconds * 1000}`);
       return { key, keyIid };
     });
 });
 
 server.head("/key/:keyIid", (request: any, reply) => {
   const key = request.params?.keyIid;
+  // Check base64 PK header here: if PK is old then response header: "X-Auth-Public-Key-Status": "stale"
+  // Check base64 PK header here: if PK is new then response header: "X-Auth-Public-Key-Status": "fresh"
+  // Check base64 PK header here: if PK is not valid then response header: "X-Auth-Public-Key-Status": "invalid" and return 401
   rGet(key)
     .then((res) => {
       return res;
@@ -216,27 +215,9 @@ server.post(`/service/:clientIid/key`, async (request: any) => {
   if (!exists) throw new Error("Service does note exists");
   if (secret !== exists.clientSecret) throw new Error("Invalid signature");
 
-  const keyIid = uuid();
-  const issuedAtInSeconds = Date.now();
-  const expiresInSeconds = Math.floor(issuedAtInSeconds / 1000) + 60 * 60;
-  const key = jwt.sign(
-    {
-      ownerIid: exists.iid,
-      keyIid,
-      aud: [exists.name, "services"],
-      iat: Math.floor(issuedAtInSeconds / 1000),
-      exp: expiresInSeconds, // expire in 7 days
-    },
-    privatekey,
-    { algorithm: "RS256" }
-  );
-
-  await KeyEntity.put({
-    keyIid,
-    expires: new Date(expiresInSeconds * 1000),
-    ownerIid: exists.iid,
+  const { key, keyIid } = await generateKey(exists.iid, {
+    aud: [exists.name, "services"],
   });
-  await rSet(keyIid, `${expiresInSeconds * 1000}`);
   return { key, keyIid };
 });
 
@@ -245,27 +226,7 @@ server.register(async (authorized) => {
     .register(authorizer, { aud: ["services"] })
     .post("/service/key/renew", async (request: any, reply) => {
       const { ownerIid, aud } = request.keyPayload;
-      const keyIid = uuid();
-      const issuedAtInSeconds = Date.now();
-      const expiresInSeconds = Math.floor(issuedAtInSeconds / 1000) + 60 * 60;
-      const key = jwt.sign(
-        {
-          ownerIid,
-          keyIid,
-          aud,
-          iat: Math.floor(issuedAtInSeconds / 1000),
-          exp: expiresInSeconds, // expire in 7 days
-        },
-        privatekey,
-        { algorithm: "RS256" }
-      );
-
-      await KeyEntity.put({
-        keyIid,
-        expires: new Date(expiresInSeconds * 1000),
-        ownerIid,
-      });
-      await rSet(keyIid, `${expiresInSeconds * 1000}`);
+      const { key, keyIid } = await generateKey(ownerIid, { aud });
       return { key, keyIid };
     });
 });

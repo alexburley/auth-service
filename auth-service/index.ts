@@ -180,7 +180,6 @@ server.post("/user/authorize", async (request: any, reply) => {
 });
 
 server.delete("/user/:iid", async (request: any) => {
-  //TODO: Create index
   await UserDB<User>("users").where("iid", request.params.iid).del();
   const res = await KeysTable.scan({
     filters: { attr: "val", eq: request.params.iid },

@@ -72,14 +72,7 @@ const generateKey = async (ownerIid, payload = {}) => {
   const keyIid = uuid();
   const issuedAtInSeconds = Date.now();
   const refreshToken = uuid();
-
-  // NOTE
-  /*
-    This is set to a week long, but ideally this would less. But making it less introduces difficulty on the frontend
-    so that we can maintain a solid user experience would need to think about issuing a refresh token for the user that
-    itself has an expiry.
-  */
-  const expiresInSeconds = Math.floor(issuedAtInSeconds / 1000) + 60 * 60;
+  const expiresInSeconds = Math.floor(issuedAtInSeconds / 1000) + 60 * 60; // One hour
 
   const key = jwt.sign(
     {
@@ -202,9 +195,6 @@ server.register((authorized) => {
 
 server.head("/key/:keyIid", (request: any, reply) => {
   const key = request.params?.keyIid;
-  // Check base64 PK header here: if PK is old then response header: "X-Auth-Public-Key-Status": "stale"
-  // Check base64 PK header here: if PK is new then response header: "X-Auth-Public-Key-Status": "fresh"
-  // Check base64 PK header here: if PK is not valid then response header: "X-Auth-Public-Key-Status": "invalid" and return 401
   rGet(key)
     .then((res) => {
       return res;
@@ -263,7 +253,6 @@ server.ready(() => {
   console.log(server.printRoutes());
 });
 
-// Run the server!
 const start = async () => {
   try {
     await server.listen(3000);

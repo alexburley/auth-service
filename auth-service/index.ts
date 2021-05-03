@@ -50,7 +50,7 @@ const KeysTable = new Table({
   partitionKey: "PK",
   sortKey: "SK",
   indexes: {
-    GSI1: { partitionKey: "val", sortKey: "expires" },
+    "val-PK-index": { partitionKey: "val", sortKey: "PK" },
   },
   DocumentClient,
 });
@@ -160,8 +160,6 @@ server.post("/user/authorize", async (request: any, reply) => {
       authcode: "",
     });
 
-  console.log("HERE", res);
-
   return generateKey(exists.iid, {
     groups: ["users"],
     aud: ["authorized"],
@@ -246,17 +244,16 @@ server.register(async (authorized) => {
     .post("/key/:keyIid/refresh", async (request: any, reply) => {
       const key = request.params?.keyIid;
       const ownerIid = request.keyPayload.ownerIid;
-      const res = await KeyEntity.query(key, {
+      const res = await KeyEntity.query(ownerIid, {
+        index: "val-PK-index",
         limit: 1,
-        gt: new Date(Date.now()).toDateString(),
-        filters: { attr: "ownerIid", eq: ownerIid },
+        eq: key,
+        filters: { attr: "expires", gt: new Date().toString() },
       });
 
-      console.log(res);
+      if (!res.Items.length) throw new Error("Key not found or expired");
 
-      // if (!res.Items.length) throw new Error("Unauthorized");
-
-      // await KeyEntity.delete({ keyIid: key, expires: res.Items[0].expires });
+      await KeyEntity.delete({ keyIid: key, expires: res.Items[0].expires });
       return generateKey(ownerIid, { aud: request.keyPayload.aud });
     });
 });

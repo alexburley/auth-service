@@ -219,11 +219,11 @@ server.head("/key/:keyIid", (request: any, reply) => {
     .catch((err: any) => reply.status(500).send(err));
 });
 
-server.post(`/service/:clientIid/key`, async (request: any) => {
+server.post(`/service/key`, async (request: any) => {
   const secret = request?.headers?.authorization;
   const [exists] = await UserDB<Service>("services")
     .select("*")
-    .where({ iid: request.params.clientIid });
+    .where({ iid: request.body.clientIid });
   if (!exists) throw new Error("Service does note exists");
   const password = exists.password;
   const hash = crypto
@@ -234,17 +234,6 @@ server.post(`/service/:clientIid/key`, async (request: any) => {
   return generateKey(exists.iid, {
     aud: [exists.name, "services"],
   });
-});
-
-server.register(async (authorized) => {
-  return authorized
-    .register(authorizer, { aud: ["services"] })
-    .post("/service/key", async (request: any, reply) => {
-      const { ownerIid, aud } = request.keyPayload;
-      return generateKey(ownerIid, {
-        aud,
-      });
-    });
 });
 
 server.register(async (authorized) => {

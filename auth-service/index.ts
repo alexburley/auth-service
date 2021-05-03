@@ -7,6 +7,7 @@ import { join } from "path";
 import { Table, Entity } from "dynamodb-toolbox";
 import { DynamoDB } from "aws-sdk";
 import { promisify } from "util";
+import * as crypto from "crypto";
 import authorizer from "../shared/authorizer";
 
 interface User {
@@ -18,7 +19,7 @@ interface User {
 interface Service {
   iid: string;
   clientSecret: string;
-  clientPassword: string;
+  password: string;
   name: string;
 }
 
@@ -204,15 +205,17 @@ server.head("/key/:keyIid", (request: any, reply) => {
 });
 
 server.post(`/service/:clientIid/key`, async (request: any) => {
-  //TODO: There is an opportunity here for the secret to be encrypted using an agreed upon password and timestamp
-  // In this way we can make sure that if the request is ever logged anywhere the signature generated will be invalid quickly.
   const secret = request?.headers?.authorization;
   const [exists] = await UserDB<Service>("services")
     .select("*")
     .where({ iid: request.params.clientIid });
   if (!exists) throw new Error("Service does note exists");
-  if (secret !== exists.clientSecret) throw new Error("Invalid signature");
-
+  const password = exists.password;
+  const hash = crypto
+    .createHmac("SHA1", password)
+    .update(exists.clientSecret)
+    .digest("hex");
+  if (hash !== secret) throw new Error("Invalid signature");
   return generateKey(exists.iid, {
     aud: [exists.name, "services"],
   });

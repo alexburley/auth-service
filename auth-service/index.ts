@@ -152,11 +152,15 @@ server.post("/user/authorize", async (request: any, reply) => {
 
   const [exists] = await UserDB<User>("users").select("*").where({ email });
   if (!exists) throw new Error("User does not exist");
-  const storedCode = parseInt(exists.authcode.split("#")[0]);
-  if (storedCode && storedCode !== authcode) throw new Error("Code invalid");
-  await UserDB<User>("users").where({ email: exists.email }).update({
-    authcode: "",
-  });
+  const storedCode = exists.authcode && parseInt(exists.authcode.split("#")[0]);
+  if (!storedCode || storedCode !== authcode) throw new Error("Code invalid");
+  const res = await UserDB<User>("users")
+    .where({ email: exists.email })
+    .update({
+      authcode: "",
+    });
+
+  console.log("HERE", res);
 
   return generateKey(exists.iid, {
     groups: ["users"],
@@ -250,7 +254,9 @@ server.register(async (authorized) => {
 
       console.log(res);
 
-      if (!res.Items.length) throw new Error("Unauthorized");
+      // if (!res.Items.length) throw new Error("Unauthorized");
+
+      // await KeyEntity.delete({ keyIid: key, expires: res.Items[0].expires });
       return generateKey(ownerIid, { aud: request.keyPayload.aud });
     });
 });
